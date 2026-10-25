@@ -1,0 +1,80 @@
+
+name: Day 1 - Kubernetes Integration Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: day1-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    name: Kind Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1.14.0
+        with:
+          version: v0.33.0
+          cluster_name: giropops
+          config: day1/kind/kind-cluster.yaml
+          wait: 180s
+
+      - name: Verify Kubernetes context
+        run: |
+          set -euo pipefail
+          kubectl config current-context
+          kubectl get nodes -o wide
+
+      - name: Wait for cluster nodes
+        run: |
+          kubectl --context kind-giropops wait \
+            --for=condition=Ready \
+            nodes --all \
+            --timeout=180s
+
+      - name: Deploy multicontainer Pod
+        run: |
+          set -euo pipefail
+          kubectl --context kind-giropops apply \
+            -f day1/kind/pod.yaml
+
+      - name: Wait for Pod readiness
+        run: |
+          kubectl --context kind-giropops \
+            -n default wait \
+            --for=condition=Ready \
+            pod/giropops \
+            --timeout=240s
+
+      - name: Execute functional tests
+        run: |
+          bash scripts/validate-day1.sh
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          kubectl --context kind-giropops get nodes -o wide || true
+          kubectl --context kind-giropops get pods -A -o wide || true
+          kubectl --context kind-giropops \
+            describe pod giropops || true
+          kubectl --context kind-giropops \
+            logs giropops -c nginx --tail=100 || true
+          kubectl --context kind-giropops \
+            logs giropops -c apache --tail=100 || true
