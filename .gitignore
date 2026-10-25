@@ -1,0 +1,42 @@
+# Environment configuration
+.env
+.env.*
+!.env.example
+
+# Kubernetes credentials
+.kube/
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+
+# Private keys and certificates
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+nohup.out
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+.venv/
+*.pyc
+
+# Local backups
+*.bak
+*.backup
+
+.venv/

@@ -218,8 +218,170 @@ Remove the Kind cluster:
 ```bash
 kind delete cluster --name giropops
 ```
+## 8. Lab Validation — Actual Results
 
-## 8. Key Takeaways
+This section documents the actual results obtained during the Day 1 Kubernetes laboratory, executed on October 25, 2026.
+
+### 8.1 Tested Environment
+
+| Component | Version / Details |
+|---|---|
+| Host | diego-lnx01 |
+| Operating System | Ubuntu 22.04 LTS |
+| Python | 3.10.12 |
+| Kind | v0.33.0 |
+| Kubernetes | v1.37.0 |
+| Container Runtime | containerd 2.3.4 |
+| Node OS | Debian GNU/Linux 13 (Trixie) |
+| NGINX | 1.30.6 |
+| Apache HTTP Server | 2.4.69 |
+| Cluster Name | giropops |
+
+### 8.2 Cluster Architecture
+
+The Kubernetes cluster was created using Kind, with the following topology:
+
+- 1 control-plane node
+- 2 worker nodes
+- Kubernetes context: `kind-giropops`
+
+Cluster creation command:
+
+```bash
+kind create cluster \
+  --name giropops \
+  --config day1/kind/kind-cluster.yaml
+```
+
+The cluster was successfully created using the `kindest/node:v1.37.0` image.
+
+**Observed nodes:**
+
+| Node | Role | Initial Status |
+|---|---|---|
+| giropops-control-plane | control-plane | Ready |
+| giropops-worker | worker | NotReady |
+| giropops-worker2 | worker | NotReady |
+
+The worker nodes were still initializing when the first node-status command was executed. Their subsequent readiness should be verified separately.
+
+### 8.3 Kubernetes Manifest Validation
+
+The following command was used to validate the Pod manifest against the Kubernetes API Server:
+
+```bash
+kubectl apply \
+  --dry-run=server \
+  -f day1/kind/pod.yaml
+```
+
+**Actual result:**
+
+```text
+pod/giropops created (server dry run)
+```
+
+The Kubernetes API Server accepted the manifest.
+
+### 8.4 Multicontainer Pod Deployment
+
+The Pod was deployed using:
+
+```bash
+kubectl apply -f day1/kind/pod.yaml
+```
+
+Its readiness was verified with:
+
+```bash
+kubectl wait \
+  --for=condition=Ready \
+  pod/giropops \
+  --timeout=180s
+```
+
+**Actual result:**
+
+```text
+pod/giropops created
+pod/giropops condition met
+```
+
+The observed Pod status was:
+
+```text
+NAME       READY   STATUS    RESTARTS
+giropops   2/2     Running   0
+```
+
+Additional deployment information:
+
+| Property | Observed Value |
+|---|---|
+| Pod Name | giropops |
+| Namespace | default |
+| Pod IP | 10.244.2.2 |
+| Scheduled Node | giropops-worker |
+| Ready Containers | 2/2 |
+| Container Restarts | 0 |
+
+### 8.5 Application Validation
+
+The Pod contains two web-server containers.
+
+| Container | Application | Configured Port | Observed HTTP Result |
+|---|---|---|---|
+| nginx | NGINX 1.30.6 | TCP/80 | HTTP 200 |
+| apache | Apache HTTP Server 2.4.69 | TCP/8080 | HTTP 200 |
+
+The following commands can be used to reproduce the connectivity tests:
+
+**NGINX**
+
+```bash
+kubectl exec giropops -c nginx -- \
+  curl -fsSI http://localhost:80
+```
+
+**Apache**
+
+```bash
+kubectl exec giropops -c nginx -- \
+  curl -fsSI http://localhost:8080
+```
+
+Both application logs recorded successful HTTP HEAD requests using the IPv6 loopback address `::1`.
+
+This demonstrates communication over the shared network namespace of the Kubernetes Pod.
+
+### 8.6 Apache Configuration Warning
+
+During container initialization, Apache displayed the following warning:
+
+```text
+AH00558: httpd: Could not reliably determine
+the server's fully qualified domain name.
+```
+
+The warning did not prevent Apache from starting or processing HTTP requests.
+
+The application continued operating successfully.
+
+### 8.7 Key Technical Findings
+
+- The Kind cluster was created successfully with three nodes.
+- The Kubernetes API Server validated the Pod manifest.
+- Both containers reached the Ready state.
+- NGINX and Apache successfully processed HTTP requests.
+- Containers within the same Pod share the network namespace.
+- Different listening ports allow multiple HTTP servers to operate within one Pod.
+- Application-level validation provides stronger evidence than container readiness alone.
+
+---
+
+
+
+## 9. Key Takeaways
 
 After completing the first lab, I gained practical experience with:
 
