@@ -1,0 +1,72 @@
+name: Validate Kubernetes Manifests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Day 1
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Kubeconform
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="v0.6.7"
+          curl -fsSL \
+            "https://github.com/yannh/kubeconform/releases/download/${VERSION}/kubeconform-linux-amd64.tar.gz" \
+            -o /tmp/kubeconform.tar.gz
+
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf /tmp/kubeconform.tar.gz \
+            -C "$HOME/.local/bin" kubeconform
+
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Validate Pod
+        run: |
+          kubeconform \
+            -strict \
+            -summary \
+            -kubernetes-version 1.34.0 \
+            day1/kind/pod.yaml
+
+      - name: Validate Kind configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install \
+            --disable-pip-version-check pyyaml
+
+          python3 - <<'PY'
+          import yaml
+
+          path = "day1/kind/kind-cluster.yaml"
+
+          with open(path, encoding="utf-8") as file:
+              config = yaml.safe_load(file)
+
+          assert config["kind"] == "Cluster"
+          assert config["apiVersion"] == "kind.x-k8s.io/v1alpha4"
+
+          roles = [node["role"] for node in config["nodes"]]
+
+          assert roles.count("control-plane") == 1
+          assert roles.count("worker") == 2
+
+          print("Kind configuration checks passed.")
+          PY
